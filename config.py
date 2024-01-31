@@ -1,0 +1,16 @@
+PORT = 5001
+ENABLE_PASSWORD = "YES"
+PASSWORD = "12345678"
+ENABLE_SIRI = "NO"
+SIRI_PASSWORD = "12345678"
+BG_COLOR_QUESTION = "orange"
+BG_COLOR_OPEN = "red"
+BG_COLOR_CLOSED = "green"
+IMAGE_QUESTION = "GarageQuestion.gif"
+IMAGE_OPEN = "GarageRed.gif"
+IMAGE_CLOSED = "GarageGreen.gif"
+NUMBER_OF_DOORS = 1
+DOOR_1_NAME = "Pat's Garage Door"
+SENSORS_PER_DOOR = 2
+ADMIN = "admin"
+ADMIN_PASS = "admin"
