@@ -1,6 +1,34 @@
 import RPi.GPIO as GPIO
 import time
 
+class DoorRelay:
+    
+    #initialize relay switch on given pin
+    def __init__(self, gpioPin):
+        self.gpioPin = gpioPin
+        GPIO.setup(gpioPin, GPIO.OUT)
+        GPIO.output(gpioPin, GPIO.HIGH)        
+
+    #turn the relay switch on
+    def turn_on(self):
+        GPIO.output(self.gpioPin, GPIO.LOW)   # turns the first relay switch ON
+    
+    #turn the relay switch off
+    def turn_off(self):
+        GPIO.output(7, GPIO.HIGH)  # turns the first relay switch OFF
+    
+    #turns the relay switch on and off the given number of times
+    #with defined delay between operations
+    def toggle(self, delay_secs = .5 , no_times =1):
+        loop = 0
+        while loop < no_times:
+            self.turn_on()
+            time.sleep(delay_secs)
+            self.turn_off()
+            time.sleep(delay_secs)
+            loop = loop + 1
+            
+
 class DoorState:
     Open = 1
     Closed = 2
@@ -32,11 +60,13 @@ class DoorSensor:
 
 class DoorMessage:
     
-    def __init__(self, message, send_after_minutes = 15, message_sent_init = False, timestamp = None):
+    # time_unit can be "m" for minutes or "s" for seconds. Anything else will be treated as mintues.
+    def __init__(self, message, send_after_time_units = 15, time_unit = "m", message_sent_init = False, timestamp = None):
         self.sent = False
-        self.send_after_mins = send_after_minutes
+        self.send_after_time_units = send_after_time_units
         self.message = message
         self.timestamp = timestamp
+        self.time_unit = time_unit
     
     def clear(self):
         self.timestamp = None
@@ -50,7 +80,10 @@ class DoorMessage:
         self.sent = False
         
     def send_message(self):
-        if self.minutes_from_timestamp() >= self.send_after_mins and self.sent != None and not self.sent:
+        if self.time_unit == "s" and self.seconds_from_timestamp() >= self.send_after_time_units and self.sent is not None and not self.sent:
+            print(self.message)
+            self.sent = True            
+        elif self.minutes_from_timestamp() >= self.send_after_time_units and self.sent is not None and not self.sent:
             print(self.message)
             self.sent = True
     
@@ -69,16 +102,17 @@ class DoorMessage:
 
 class Door:
     
-    def __init__(self, door_sensor_closed=None, door_sensor_open=None, warn_when_open_minutes = 15, warn_when_moving_minutes = 15):
+    def __init__(self, relay_switch, door_sensor_closed=None, door_sensor_open=None, warn_when_open_minutes = 15, warn_when_moving_seconds = 15):
+        self.relay_switch = relay_switch
         self.current_state = DoorState.Unknown
         self.last_state = DoorState.Unknown
         #self.open_door_message_sent = True
         #self.warning_minutes = warn_when_open_minutes
         message = "Your Garage Door has been open for {} minutes".format(warn_when_open_minutes)       
-        self.open_door = DoorMessage(message, warn_when_open_minutes, True)
+        self.open_door = DoorMessage(message, warn_when_open_minutes, "m", True)
             
-        message = "Your Garage Door has been in a not open and not closed state for {} minutes. Is it stuck?".format(warn_when_moving_minutes)
-        self.moving_door = DoorMessage(message, warn_when_moving_minutes, True)
+        message = "Your Garage Door has been in a not open and not closed state for {} seconds. Is it stuck?".format(warn_when_moving_seconds)
+        self.moving_door = DoorMessage(message, warn_when_moving_seconds, "s", True)
         
         if door_sensor_closed is None and door_sensor_open is None:
             self.sensors = 0  # No sensors
@@ -92,10 +126,15 @@ class Door:
             self.sensors = 2
             self.closed_sensor = door_sensor_closed
             self.open_sensor = door_sensor_open
-        
-    def set_unknown_state(self):
+    
+    # sets current state to the supplied state and
+    # sets the last_state to the current state
+    def set_new_state(self, new_state):
         self.last_state = self.current_state
-        self.current_state = DoorState.Unknown
+        self.current_state = new_state
+    
+    def set_unknown_state(self):
+        self.set_new_state(DoorState.Unknown)
         self.open_door.timestamp = None
         self.open_door.sent = None
     
@@ -128,12 +167,10 @@ class Door:
     def set_opening_state(self):
         if self.open_door.timestamp == None:
             self.open_door.set()
-        self.last_state = self.current_state
-        self.current_state = DoorState.Opening
+        self.set_new_state(DoorState.Opening)
             
     def set_closing_state(self):
-        self.last_state = self.current_state
-        self.current_state = DoorState.Closing
+        self.set_new_state(DoorState.Closing)
             
     def set_open_state(self):
         if self.open_door.timestamp == None:
@@ -141,13 +178,11 @@ class Door:
         else:
             self.open_door.send_message()
             
-        self.last_state = self.current_state
-        self.current_state = DoorState.Open
+        self.set_new_state(DoorState.Open)
         self.moving_door.clear()
         
     def set_closed_state(self):
-        self.last_state = self.current_state
-        self.current_state = DoorState.Closed
+        self.set_new_state(DoorState.Closed)
         self.open_door.clear()
         self.moving_door.clear()     
     
@@ -237,20 +272,39 @@ class Door:
             return True
         else:
             return False            
+    
+    #Sends a signal to the relay switch to open the garage door, if the current status is closed, and returns True and DoorState.Opening.
+    #If the garage door is not in a closed state, False and the current DoorState is returned. (e.g. DoorState.Closed)
+    def open_door(self):
+        if self.is_closed():
+            self.relay_switch.toggle(1, 1)
+            self.set_new_state(DoorState.Opening)
+            return True, self.current_state
+        else:
+            return False, self.current_state
+    
+    #Sends a signal to the relay switch to close the garage door, if the current status is not closed, and returns True and DoorState.Closing.
+    #If the garage door is already in a closed state, False and DoorState.Closed is returned.
+    def close_door(self):
+        if not self.is_closed():
+            self.relay_switch.toggle(1, 1)
+            self.set_new_state(DoorState.Closing)
+            return True, self.current_state
+        else:
+            return False, self.current_state            
         
-            
-    # This method creates a door instance with none, one or two door sensors initialized
+    # This method creates a door instance with a relay switch at the given pin, none, one or two door sensors initialized
     # to the given pins. If no pin values are given, pin 16 is used for the closed door sensor
     # and pin 18 for the open door sensor. If you want to create a Door instance with 1 or no sensors
     # submit a negative value for the pin you are not using.
     @classmethod
-    def create_instance(cls, closed_door_sensor_pin = 18, open_door_sensor_pin = 16, warn_after_open_minutes = 15, warn_after_minutes_in_moving_state = 15):
-        
+    def create_instance(cls, relay_switch_pin, closed_door_sensor_pin, open_door_sensor_pin, warn_after_open_minutes, warn_after_minutes_in_moving_state):
+        relay = DoorRelay(relay_switch_pin)
         if open_door_sensor_pin > 0:
             open_sensor = DoorSensor(open_door_sensor_pin)
         
         if closed_door_sensor_pin > 0:
             closed_sensor = DoorSensor(closed_door_sensor_pin) 
         
-        return cls(closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
+        return cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
    

@@ -24,13 +24,21 @@ def get_current_date_time_formatted():
     date = "{}-{}-{} {}:{}".format(now[0], now[1], now[2], now[3], now[4])
     return date
 
+def file_exists(filename):
+    return filename in os.listdir()
+
 def append_log_file(filename, message):
-    check_file_size(filename)
+    
+    if not file_exists(filename):
+        with open(filename, 'w') as file:
+            pass
+    else:
+        check_file_size(filename)
+                
     with open(filename, 'a') as file:
         print(message)
-        # Write content to the file
         file.write(message + '\n')
-        file.close()  
+            
 
 log_file = 'log.txt'
 message = "Program starting - {}".format(get_current_date_time_formatted())
@@ -42,7 +50,7 @@ print(" Number of Sensors: " + str(SENSORS_PER_DOOR))
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
-door = Door.create_instance(18,16,1,1)
+door = Door.create_instance(7,18,16,1,1)
 time.sleep(1)
 
 try:
