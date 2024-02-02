@@ -1,6 +1,6 @@
-relay pin = 7
-closed door sensor pin = 18
-open door sensor pin = 16
-warn when open for minutes = 10
-warn when moving for secs = 30
-log file = log.txt
+relay pin=7
+closed door sensor pin=18
+open door sensor pin=16
+warn when open for minutes=10
+warn when moving for secs=30
+log file=log.txt

@@ -15,7 +15,7 @@ class DoorRelay:
     
     #turn the relay switch off
     def turn_off(self):
-        GPIO.output(7, GPIO.HIGH)  # turns the first relay switch OFF
+        GPIO.output(self.gpioPin, GPIO.HIGH)  # turns the first relay switch OFF
     
     #turns the relay switch on and off the given number of times
     #with defined delay between operations
