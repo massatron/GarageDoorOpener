@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 import time
+from appSettings import AppSettings
 
 class DoorRelay:
     
@@ -88,13 +89,13 @@ class DoorMessage:
             self.sent = True
     
     def minutes_from_timestamp(self):
-        if self.timestamp == None:
+        if self.timestamp is None:
             return 0
         difference_minutes =self.seconds_from_timestamp() / 60
         return difference_minutes
     
     def seconds_from_timestamp(self):
-        if self.timestamp == None:
+        if self.timestamp is None:
             return 0
         now_stamp = time.mktime(time.localtime())
         difference_secs = (now_stamp - self.timestamp)
@@ -141,7 +142,7 @@ class Door:
     #probably either opening or closing, but could be stopped in between somewhere
     def set_moving_state(self):
         #track how long the door has been in a non-open/non-closed state
-        if self.moving_door.timestamp == None:
+        if self.moving_door.timestamp is None:
             self.moving_door.reset()
             
          # Look at previous state to determine in which direction wer are moving.
@@ -165,7 +166,7 @@ class Door:
         self.moving_door.send_message()
     
     def set_opening_state(self):
-        if self.open_door.timestamp == None:
+        if self.open_door.timestamp is None:
             self.open_door.set()
         self.set_new_state(DoorState.Opening)
             
@@ -173,7 +174,7 @@ class Door:
         self.set_new_state(DoorState.Closing)
             
     def set_open_state(self):
-        if self.open_door.timestamp == None:
+        if self.open_door.timestamp is None:
             self.open_door.reset()
         else:
             self.open_door.send_message()
@@ -230,25 +231,25 @@ class Door:
     # the state of the door changed since last evaluation. If the state has changed, a message describing the state change is available
     # from the self.state_change_message member.
     def evaluate_door_state(self):
-        if self.sensors == 0 or self.sensors == None:
+        if self.sensors == 0 or self.sensors is None:
             # no sensors present, which means we can't determine state
             set_unknown_state()
             
-        elif self.sensors == 1 and self.closed_sensor != None :
+        elif self.sensors == 1 and self.closed_sensor is not None :
             #We only have one sensor, so we either closed or assumed open.
             if self.closed_sensor.is_magnet_aligned():
                 self.set_closed_state()
             else:
                 self.set_open_state()
                     
-        elif self.sensors == 1 and self.open_sensor != None:
+        elif self.sensors == 1 and self.open_sensor is not None:
             #We only have one sensor, so we either open or assumed closed.
             if self.open_sensor.is_magnet_aligned():
                 self.set_open_state()
             else:
                 self.set_closed_state()
             
-        elif self.sensors == 2 and self.closed_sensor != None and self.open_sensor != None:
+        elif self.sensors == 2 and self.closed_sensor is not None and self.open_sensor is not None:
             # We have two sensors, we should be able to determine if we are open, closed, in an opening or closing state.
             if self.closed_sensor.is_magnet_aligned() and self.open_sensor.is_magnet_aligned():
                 message = "This should be physically impossible. The door is both open and closed at the same time...Call Einstein, we have discovered new physics."
@@ -307,4 +308,29 @@ class Door:
             closed_sensor = DoorSensor(closed_door_sensor_pin) 
         
         return cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
-   
+    
+    # This method creates a door instance based on the settings in the doorSettings file.
+    @classmethod
+    def create_instance_from_settings(cls):
+        settings = AppSettings("doorSettings")
+        try:
+            settings_values = settings.get_values_for_keys(["relay pin", "closed door sensor pin", "open door sensor pin", "warn when open for minutes", "warn when moving for secs"])
+
+            # Mandatory setting: relay_pin
+            relay_pin = int(settings_values[0]) if len(settings_values) > 0 and settings_values[0].isdigit() else None
+            if relay_pin is None:
+                raise ValueError("Relay pin configuration is missing or invalid.")
+
+            # Optional settings with defaults
+            closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1].isdigit() else default_closed_pin_value
+            open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2].isdigit() else default_open_pin_value
+            open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3].isdigit() else default_open_min_warn
+            move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4].isdigit() else default_move_sec_warn
+            
+        except ValueError as e:
+            print(f"Error in settings configuration: {e}")
+            raise 
+
+        return cls.create_instance(relay_pin, closed_pin, open_pin, open_min_warn, move_sec_warn)
+    
+

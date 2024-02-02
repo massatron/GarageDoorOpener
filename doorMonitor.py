@@ -54,33 +54,11 @@ class DoorLogFile:
                 
 
 class DoorMonitor:
-    def __init__(self, door_log_file):
-        self.get_init_values()
+    def __init__(self, door, door_log_file):
         self.door_log = door_log_file
         GPIO.setmode(GPIO.BOARD)
         GPIO.setwarnings(False)
-        #print (self.relay_pin, self.closed_pin, self.open_pin, self.open_min_warn, self.move_sec_warn)
-        self.door = Door.create_instance(self.relay_pin, self.closed_pin, self.open_pin, self.open_min_warn, self.move_sec_warn)
-
-    def get_init_values(self):
-        settings = AppSettings("doorSettings")
-        try:
-            settings_values = settings.get_values_for_keys(["relay pin", "closed door sensor pin", "open door sensor pin", "warn when open for minutes", "warn when moving for secs"])
-
-            # Mandatory setting: relay_pin
-            self.relay_pin = int(settings_values[0]) if len(settings_values) > 0 and settings_values[0].isdigit() else None
-            if self.relay_pin is None:
-                raise ValueError("Relay pin configuration is missing or invalid.")
-
-            # Optional settings with defaults
-            self.closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1].isdigit() else default_closed_pin_value
-            self.open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2].isdigit() else default_open_pin_value
-            self.open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3].isdigit() else default_open_min_warn
-            self.move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4].isdigit() else default_move_sec_warn
-            
-        except ValueError as e:
-            print(f"Error in settings configuration: {e}")
-            raise 
+        self.door = door
     
     def start(self):
         print(" Control + C to exit Program")
@@ -110,12 +88,18 @@ class DoorMonitor:
 
 
     @classmethod
-    def create_instance(cls, start = False):
+    def create_instance(cls, door_to_monitor = None, start = False):
         
         settings = AppSettings("doorSettings")
         log_file = settings.get_values_for_keys("log file")[0]
         door_log = DoorLogFile(log_file)
-        monitor = cls(door_log)
+        if door_to_monitor is None:
+            door = Door.create_instance_from_settings()
+            print("door created from settings")
+        else:
+            door = door_to_monitor
+            
+        monitor = cls(door, door_log)
 
         if start:
             monitor.start()
