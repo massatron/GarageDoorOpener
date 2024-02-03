@@ -37,19 +37,19 @@ class DoorState:
     Opening = 4
     Closing = 5
     
-    def status_string(status):
-        if status == 1:
+    def state_string(state):
+        if state == 1:
             return "Open"
-        if status == 2:
+        if state == 2:
             return "Closed"
-        if status == 3:
+        if state == 3:
             return "Unknown"
-        if status == 4:
+        if state == 4:
             return "Opening"
-        if status == 5:
+        if state == 5:
             return "Closing"
         
-        raise ValueError("DoorState value: ", status, " is invalid")
+        raise ValueError("DoorState value: ", state, " is invalid")
     
 class DoorSensor:
     def __init__(self, gpioPin):
@@ -269,27 +269,33 @@ class Door:
             raise ValueError(message)
         
         if(self.state_changed()):
-            self.state_change_message = "Door state changed from {} to {}".format(DoorState.status_string(self.last_state), DoorState.status_string(self.current_state))
+            self.state_change_message = "Door state changed from {} to {}".format(DoorState.state_string(self.last_state), DoorState.state_string(self.current_state))
             return True
         else:
             return False            
     
-    #Sends a signal to the relay switch to open the garage door, if the current status is closed, and returns True and DoorState.Opening.
+    #Sends a signal to the relay switch to open the garage door, if the current state is closed, and returns True and DoorState.Opening.
     #If the garage door is not in a closed state, False and the current DoorState is returned. (e.g. DoorState.Closed)
-    def open_door(self):
+    def open_the_door(self):
+        #print('opening door')
+        self.evaluate_door_state()
         if self.is_closed():
             self.relay_switch.toggle(1, 1)
-            self.set_new_state(DoorState.Opening)
+            self.set_opening_state()
+            self.evaluate_door_state()
             return True, self.current_state
         else:
             return False, self.current_state
     
-    #Sends a signal to the relay switch to close the garage door, if the current status is not closed, and returns True and DoorState.Closing.
+    #Sends a signal to the relay switch to close the garage door, if the current state is not closed, and returns True and DoorState.Closing.
     #If the garage door is already in a closed state, False and DoorState.Closed is returned.
-    def close_door(self):
+    def close_the_door(self):
+        #print('closing door')
+        self.evaluate_door_state()
         if not self.is_closed():
             self.relay_switch.toggle(1, 1)
-            self.set_new_state(DoorState.Closing)
+            self.set_closing_state()
+            self.evaluate_door_state()
             return True, self.current_state
         else:
             return False, self.current_state            
@@ -307,7 +313,9 @@ class Door:
         if closed_door_sensor_pin > 0:
             closed_sensor = DoorSensor(closed_door_sensor_pin) 
         
-        return cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
+        instance = cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
+        instance.evaluate_door_state()
+        return instance
     
     # This method creates a door instance based on the settings in the doorSettings file.
     @classmethod
@@ -333,4 +341,3 @@ class Door:
 
         return cls.create_instance(relay_pin, closed_pin, open_pin, open_min_warn, move_sec_warn)
     
-
