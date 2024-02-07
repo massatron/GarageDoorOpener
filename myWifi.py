@@ -47,9 +47,9 @@ class MyWifi:
         elif troubleshooting:
             config = wlan.ifconfig()
             print("Network configuration:", config)
-            self.print_wlan_status(wlan)
+            self.print_wlan_status()
         else:
-            self.print_wlan_status(wlan)
+            self.print_wlan_status()
             raise RuntimeError('Network connection failed.')
         
     def print_wlan_status(self):

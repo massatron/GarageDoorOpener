@@ -18,7 +18,20 @@ class DoorCommandListener:
     
         if start_listening:
             self.start()
-            
+    
+    # sends the current door state back to the client using given connection.
+    def return_door_state(self, connection, print_to_console = False):
+        # evaluate current state
+        door_state_changed = self.door.evaluate_door_state()
+        current_door_state = self.door.get_current_state_string()
+        
+        if print_to_console:
+            print(f'Current door state: {current_door_state}')
+            print(f'Listening for command.')
+        
+        # send state back to client
+        conn.send(response.encode(current_door_state))
+    
     # Starts the listener
     def start(self, print_to_console = False):
         
@@ -26,11 +39,12 @@ class DoorCommandListener:
         
         while self.is_listening:
             
-            if print_to_console:
-                print(f'Listening.')
-            
             #wait for incoming connection
             conn, addr = self.connection.accept()
+            
+            #before we start actions, make sure we have the latest door status
+            #and send it back to the client in case it wants to know
+            return_door_state(conn, print_to_console)
             
             if print_to_console:
                 print(f'Connecting from: {addr}')
@@ -53,8 +67,7 @@ class DoorCommandListener:
                 elif gpio.value == 'stop':
                     self.is_listening = False
                 elif gpio.value == 'status':
-                    response = f'Current door state is: {self.door.current_state}'
-                    conn.send(response.encode())
+                    return_door_state(conn, print_to_console)  
                 elif print_to_console:
                     print('Invalid value for "gpio":', gpio_value)
             else:

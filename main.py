@@ -1,16 +1,18 @@
 import threading
-from connectWifi import connect_wifi
-from door import Door
+from myWifi import MyWifi
+from door import *
 from doorMonitor import DoorMonitor
+from doorCommandListener import DoorCommandListener
 
-def listen_for_command():
-    import time
-    time.sleep(5)
-    return "Open Door"
+def listen_for_command(door):
+    wifi =  MyWifi.create_instance_from_settings()
+    print(f"Door state before starting listener: {DoorState.state_string(door.current_state)}")
+    doorCmdListener = DoorCommandListener(door, wifi, port = 5002, start_listening = False)
+    doorCmdListener.start(True)
 
 def main():
     
-    connect_wifi()
+    
     
     door = Door.create_instance_from_settings()
     
@@ -19,12 +21,8 @@ def main():
     monitor_thread = threading.Thread(target=door_monitor.start)
     monitor_thread.start()
 
-    while True:
-        command = listen_for_command()  # Your logic to listen for commands
-        if command == "Open Door":
-            door.open_door()
-        elif command == "Close Door":
-            door.close_door()
+
+    listen_for_command(door)  # Your logic to listen for commands
 
 
 if __name__ == "__main__":

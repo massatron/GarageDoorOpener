@@ -60,6 +60,10 @@ class DoorMonitor:
         GPIO.setwarnings(False)
         self.door = door
     
+    def get_current_door_state(self):
+        return self.door.get_current_state_string()
+    
+    #Runs DoorMonitor continously.
     def start(self):
         print(" Control + C to exit Program")
         message = "Starting Monitor"

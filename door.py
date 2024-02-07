@@ -128,6 +128,11 @@ class Door:
             self.closed_sensor = door_sensor_closed
             self.open_sensor = door_sensor_open
     
+    # returns the current state of the door in
+    # string format.
+    def get_current_state_string(self):
+        return DoorState.state_string(self.current_state)
+    
     # sets current state to the supplied state and
     # sets the last_state to the current state
     def set_new_state(self, new_state):
@@ -236,14 +241,14 @@ class Door:
             set_unknown_state()
             
         elif self.sensors == 1 and self.closed_sensor is not None :
-            #We only have one sensor, so we either closed or assumed open.
+            #We only have one sensor, so we are either closed or assumed open.
             if self.closed_sensor.is_magnet_aligned():
                 self.set_closed_state()
             else:
                 self.set_open_state()
                     
         elif self.sensors == 1 and self.open_sensor is not None:
-            #We only have one sensor, so we either open or assumed closed.
+            #We only have one sensor, so we are either open or assumed closed.
             if self.open_sensor.is_magnet_aligned():
                 self.set_open_state()
             else:
