@@ -312,12 +312,15 @@ class Door:
     @classmethod
     def create_instance(cls, relay_switch_pin, closed_door_sensor_pin, open_door_sensor_pin, warn_after_open_minutes, warn_after_minutes_in_moving_state):
         relay = DoorRelay(relay_switch_pin)
+        open_sensor = None
+        closed_sensor = None
+        
         if open_door_sensor_pin > 0:
             open_sensor = DoorSensor(open_door_sensor_pin)
         
         if closed_door_sensor_pin > 0:
-            closed_sensor = DoorSensor(closed_door_sensor_pin) 
-        
+            closed_sensor = DoorSensor(closed_door_sensor_pin)
+            
         instance = cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
         instance.evaluate_door_state()
         return instance
@@ -328,21 +331,22 @@ class Door:
         settings = AppSettings("doorSettings")
         try:
             settings_values = settings.get_values_for_keys(["relay pin", "closed door sensor pin", "open door sensor pin", "warn when open for minutes", "warn when moving for secs"])
-
             # Mandatory setting: relay_pin
             relay_pin = int(settings_values[0]) if len(settings_values) > 0 and settings_values[0].isdigit() else None
             if relay_pin is None:
                 raise ValueError("Relay pin configuration is missing or invalid.")
 
             # Optional settings with defaults
-            closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1].isdigit() else default_closed_pin_value
-            open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2].isdigit() else default_open_pin_value
-            open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3].isdigit() else default_open_min_warn
-            move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4].isdigit() else default_move_sec_warn
+            closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1] is not None and settings_values[1].isdigit() else -1
+            open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2] is not None and settings_values[2].isdigit() else -1
+            open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3] is not None and settings_values[3].isdigit() else 15
+            move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4] is not None and settings_values[4].isdigit() else 30
             
         except ValueError as e:
             print(f"Error in settings configuration: {e}")
             raise 
 
         return cls.create_instance(relay_pin, closed_pin, open_pin, open_min_warn, move_sec_warn)
-    
+
+#tests
+#door = Door.create_instance_from_settings()
