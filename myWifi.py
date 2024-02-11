@@ -28,7 +28,20 @@ class MyWifi:
 
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
-        wlan.connect(self.ssid, self.pwd)
+        
+        networks = wlan.scan()
+        ssid_found = False
+    
+        # Find the network with matching SSID (case-insensitive)
+        for ssid, *_ in networks:
+            if ssid.decode().lower() == self.ssid.lower():
+                self.ssid = ssid.decode()
+                wlan.connect(self.ssid, self.pwd)
+                ssid_found = True
+                break
+         
+        if not ssid_found:
+            raise ValueError("SSID not found")
         
         i = 0
         while not wlan.isconnected() and i < max_tries:
@@ -143,6 +156,7 @@ class MyWifi:
         settings = AppSettings("netCred")
         try:
             ssid, password = settings.get_values_for_keys(["ssid", "password"])
+            print(f'<{ssid}><{password}>')
             
         except ValueError as e:
             print(f"Error in settings configuration: {e}")
