@@ -1,4 +1,5 @@
 from machine import Pin, I2C
+import machine
 import ujson
 from picozero import pico_led
 from door import *
@@ -52,24 +53,26 @@ class DoorCommandListener:
             command = ujson.loads(data)
             
             if print_to_console:
-                print(f'Data received: {data}')
                 print(f'Command: {command}')
             
             # check if we have a valid Door command
-            if 'gpio' in command:
-                gpio_value = command['gpio']
-                if gpio_value == 'open':
-                    self.door.open_the_door()
-                elif gpio_value == 'close':
-                    self.door.close_the_door()
-                elif gpio.value == 'stop':
-                    self.is_listening = False
-                elif gpio.value == 'status':
-                    self.return_door_state(conn, print_to_console)  
-                elif print_to_console:
-                    print('Invalid value for "gpio":', gpio_value)
+
+            if command == 'open':
+                self.door.open_the_door()
+            elif command == 'close':
+                self.door.close_the_door()
+            elif command == 'stop':
+                self.is_listening = False
+            elif command == 'reboot':
+                machine.reset()
+            elif command == 'sleep':
+                machine.deepsleep()
+            elif command == 'status':
+                self.return_door_state(conn, print_to_console)  
+            elif print_to_console:
+                print('Invalid value for "gpio":', gpio_value)
             else:
-                print('Error: Missing keys "gpio" and "info"')
+                print('Invalid command received."')
             
             print(f'Current door state is: {DoorState.state_string(self.door.current_state)}')
             conn.close()
