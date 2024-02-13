@@ -3,3 +3,6 @@ log.txt
 log.py
 netCred
 RPi/__pycache__/
+**/*blend1
+case/print*
+case/working\ copy.stl
