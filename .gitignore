@@ -4,5 +4,5 @@ log.py
 netCred
 RPi/__pycache__/
 case/print*
-case/working\ copy.stl
-case/working| copy.blend1
+case/*.blend1
+case/working copy.stl
