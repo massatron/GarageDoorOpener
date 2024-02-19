@@ -94,12 +94,13 @@ class MyWifi:
                 ip = self.ip
                 
             address = (ip, port)
-            print(address)
-            connection = socket.socket()
-            connection.bind(address)
-            connection.listen(1)
+            server_socket = socket.socket()
+            # Set the SO_REUSEADDR option to allow the port to be reused immediately
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket.bind(address)
+            server_socket.listen(1)
             print(f'Listening on port {port}')
-            return connection
+            return server_socket
         else:
             print ("Not connectd to wifi")
 
