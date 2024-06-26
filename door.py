@@ -59,61 +59,47 @@ class DoorSensor:
     def is_magnet_aligned(self):  
         return (GPIO.input(self.gpioPin) == GPIO.HIGH)
 
-class DoorMessage:
+class DoorStateTimer:
     
     # time_unit can be "m" for minutes or "s" for seconds. Anything else will be treated as mintues.
-    def __init__(self, message, send_after_time_units = 15, time_unit = "m", message_sent_init = False, timestamp = None):
-        self.sent = False
-        self.send_after_time_units = send_after_time_units
-        self.message = message
-        self.timestamp = timestamp
-        self.time_unit = time_unit
-    
-    def clear(self):
-        self.timestamp = None
-        self.sent = None
-        
-    def set(self):
-        self.reset()
+    def __init__(self, doorstate):
+        self.doorstate = doorstate
+        self.set_state_start()
         
     def reset(self):
-        self.timestamp = time.mktime(time.localtime())
-        self.sent = False
-        
-    def send_message(self):
-        if self.time_unit == "s" and self.seconds_from_timestamp() >= self.send_after_time_units and self.sent is not None and not self.sent:
-            print(self.message)
-            self.sent = True            
-        elif self.minutes_from_timestamp() >= self.send_after_time_units and self.sent is not None and not self.sent:
-            print(self.message)
-            self.sent = True
-    
+        self.start_time = None
+
     def minutes_from_timestamp(self):
-        if self.timestamp is None:
+        if self.start_time is None:
             return 0
         difference_minutes =self.seconds_from_timestamp() / 60
-        return difference_minutes
+        return int(difference_minutes)
     
     def seconds_from_timestamp(self):
-        if self.timestamp is None:
+        if self.start_time is None:
             return 0
         now_stamp = time.mktime(time.localtime())
-        difference_secs = (now_stamp - self.timestamp)
-        return difference_secs    
+        difference_secs = (now_stamp - self.start_time)
+        return int(difference_secs)
+    
+    def set_state_start(self):
+        self.start_time = time.mktime(time.localtime())
 
 class Door:
     
     def __init__(self, relay_switch, door_sensor_closed=None, door_sensor_open=None, warn_when_open_minutes = 15, warn_when_moving_seconds = 15):
         self.relay_switch = relay_switch
+        
+        #setup known states
         self.current_state = DoorState.Unknown
         self.last_state = DoorState.Unknown
-        #self.open_door_message_sent = True
-        #self.warning_minutes = warn_when_open_minutes
-        message = "Your Garage Door has been open for {} minutes".format(warn_when_open_minutes)       
-        self.open_door = DoorMessage(message, warn_when_open_minutes, "m", True)
-            
-        message = "Your Garage Door has been in a not open and not closed state for {} seconds. Is it stuck?".format(warn_when_moving_seconds)
-        self.moving_door = DoorMessage(message, warn_when_moving_seconds, "s", True)
+
+        #setup door state timer
+        self.unknown_state_timer = DoorStateTimer(DoorState.Unknown)
+        self.open_state_timer = DoorStateTimer(DoorState.Open)
+        self.opening_state_timer = DoorStateTimer(DoorState.Opening)
+        self.closed_state_timer = DoorStateTimer(DoorState.Closed)
+        self.closing_state_timer = DoorStateTimer(DoorState.Closing)
         
         if door_sensor_closed is None and door_sensor_open is None:
             self.sensors = 0  # No sensors
@@ -127,7 +113,16 @@ class Door:
             self.sensors = 2
             self.closed_sensor = door_sensor_closed
             self.open_sensor = door_sensor_open
+        
+        self.evaluate_door_state()
     
+    # resets all door state timers.
+    def reset_state_timers(self):
+        self.open_state_timer.reset()
+        self.opening_state_timer.reset()
+        self.closed_state_timer.reset()
+        self.closing_state_timer.reset()
+        
     # returns the current state of the door in
     # string format.
     def get_current_state_string(self):
@@ -141,16 +136,10 @@ class Door:
     
     def set_unknown_state(self):
         self.set_new_state(DoorState.Unknown)
-        self.open_door.timestamp = None
-        self.open_door.sent = None
     
     #probably either opening or closing, but could be stopped in between somewhere
     def set_moving_state(self):
-        #track how long the door has been in a non-open/non-closed state
-        if self.moving_door.timestamp is None:
-            self.moving_door.reset()
-            
-         # Look at previous state to determine in which direction wer are moving.
+        # Look at previous state to determine in which direction wer are moving.
         if self.last_state == DoorState.Opening:
             #still opening - we could be closing again, but we can't really tell.
             self.set_opening_state()
@@ -166,32 +155,37 @@ class Door:
         elif self.last_state == DoorState.Closed:
             #We are now opening
             self.set_opening_state() 
-        
-        self.open_door.send_message()
-        self.moving_door.send_message()
     
     def set_opening_state(self):
-        if self.open_door.timestamp is None:
-            self.open_door.set()
-        self.set_new_state(DoorState.Opening)
+
+        if self.last_state != self.current_state:
+            self.reset_state_timers()
+            self.opening_state_timer.set_state_start()
             
+        self.set_new_state(DoorState.Opening)
+        
     def set_closing_state(self):
+        if self.last_state != self.current_state:
+            self.reset_state_timers()
+            self.closing_state_timer.set_state_start()
+            
         self.set_new_state(DoorState.Closing)
             
     def set_open_state(self):
-        if self.open_door.timestamp is None:
-            self.open_door.reset()
-        else:
-            self.open_door.send_message()
+        if self.last_state != self.current_state:
+            self.reset_state_timers()
+            self.open_state_timer.set_state_start()
             
         self.set_new_state(DoorState.Open)
-        self.moving_door.clear()
         
     def set_closed_state(self):
+        if self.last_state != self.current_state:
+            self.reset_state_timers()
+            self.closed_state_timer.set_state_start()
+        
+            
         self.set_new_state(DoorState.Closed)
-        self.open_door.clear()
-        self.moving_door.clear()     
-    
+  
     def is_opening(self):
         return (self.current_state == DoorState.Opening)
     
@@ -210,25 +204,54 @@ class Door:
         return False
         
     def seconds_open(self):
-        if self.is_closed():
+        if self.is_open():
+            return self.open_state_timer.seconds_from_timestamp()
+        else:
             return 0
-        return self.open_door.seconds_from_timestamp()
-    
-    def seconds_moving(self):
-        if self.is_moving():
-            return self.moving_door.seconds_from_timestamp()
-        return 0
-    
-    def minutes_moving(self):
-        if self.is_moving():
-            return self.moving_door.minutes_from_timestamp()
-        return 0
     
     def minutes_open(self):
-        if self.is_closed() or self.is_closing():
+        if self.is_open():
+            return self.open_state_timer.minutes_from_timestamp()
+        else:
             return 0
         return self.open_door.minutes_from_timestamp()
     
+    def seconds_closed(self):
+        if self.is_closed():
+            return self.closed_state_timer.seconds_from_timestamp()
+        else:
+            return 0
+    
+    def minutes_closed(self):
+        if self.is_closed():
+            return self.closed_state_timer.minutes_from_timestamp()
+        else:
+            return 0
+        
+    def seconds_opening(self):
+        if self.is_opening():
+            return self.opening_state_timer.seconds_from_timestamp()
+        else:
+            return 0
+    
+    def minutes_opening(self):
+        if self.is_opening():
+            return self.opening_state_timer.minutes_from_timestamp()
+        else:
+            return 0
+    
+    def seconds_closing(self):
+        if self.is_closing():
+            return self.closing_state_timer.seconds_from_timestamp()
+        else:
+            return 0
+    
+    def minutes_closing(self):
+        if self.is_closing():
+            return self.closing_state_timer.minutes_from_timestamp()
+        else:
+            return 0
+        
     def state_changed(self):
         return self.current_state != self.last_state
     
@@ -258,7 +281,7 @@ class Door:
             # We have two sensors, we should be able to determine if we are open, closed, in an opening or closing state.
             if self.closed_sensor.is_magnet_aligned() and self.open_sensor.is_magnet_aligned():
                 message = "This should be physically impossible. The door is both open and closed at the same time...Call Einstein, we have discovered new physics."
-                raise ValueError(message)
+                #raise ValueError(message)
             
             elif self.closed_sensor.is_magnet_aligned():
                 self.set_closed_state()
@@ -312,15 +335,12 @@ class Door:
     @classmethod
     def create_instance(cls, relay_switch_pin, closed_door_sensor_pin, open_door_sensor_pin, warn_after_open_minutes, warn_after_minutes_in_moving_state):
         relay = DoorRelay(relay_switch_pin)
-        open_sensor = None
-        closed_sensor = None
-        
         if open_door_sensor_pin > 0:
             open_sensor = DoorSensor(open_door_sensor_pin)
         
         if closed_door_sensor_pin > 0:
-            closed_sensor = DoorSensor(closed_door_sensor_pin)
-            
+            closed_sensor = DoorSensor(closed_door_sensor_pin) 
+        
         instance = cls(relay, closed_sensor, open_sensor, warn_after_open_minutes, warn_after_minutes_in_moving_state)
         instance.evaluate_door_state()
         return instance
@@ -331,22 +351,21 @@ class Door:
         settings = AppSettings("doorSettings")
         try:
             settings_values = settings.get_values_for_keys(["relay pin", "closed door sensor pin", "open door sensor pin", "warn when open for minutes", "warn when moving for secs"])
+
             # Mandatory setting: relay_pin
             relay_pin = int(settings_values[0]) if len(settings_values) > 0 and settings_values[0].isdigit() else None
             if relay_pin is None:
                 raise ValueError("Relay pin configuration is missing or invalid.")
 
             # Optional settings with defaults
-            closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1] is not None and settings_values[1].isdigit() else -1
-            open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2] is not None and settings_values[2].isdigit() else -1
-            open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3] is not None and settings_values[3].isdigit() else 15
-            move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4] is not None and settings_values[4].isdigit() else 30
+            closed_pin = int(settings_values[1]) if len(settings_values) > 1 and settings_values[1].isdigit() else default_closed_pin_value
+            open_pin = int(settings_values[2]) if len(settings_values) > 2 and settings_values[2].isdigit() else default_open_pin_value
+            open_min_warn = int(settings_values[3]) if len(settings_values) > 3 and settings_values[3].isdigit() else default_open_min_warn
+            move_sec_warn = int(settings_values[4]) if len(settings_values) > 4 and settings_values[4].isdigit() else default_move_sec_warn
             
         except ValueError as e:
             print(f"Error in settings configuration: {e}")
             raise 
 
         return cls.create_instance(relay_pin, closed_pin, open_pin, open_min_warn, move_sec_warn)
-
-#tests
-#door = Door.create_instance_from_settings()
+    

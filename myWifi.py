@@ -86,24 +86,34 @@ class MyWifi:
             print("WLAN not initialized")
     
     #opens a socket on given ip and port
-    def open_socket(self, ip = None, port = 80):
-        
+    def open_socket(self, ip=None, port=80, listen=True):
         if self.is_connected():
-            # Open a socket for the webserver to listen to
             if ip is None:
                 ip = self.ip
-                
+            
             address = (ip, port)
-            server_socket = socket.socket()
-            # Set the SO_REUSEADDR option to allow the port to be reused immediately
-            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server_socket.bind(address)
-            server_socket.listen(1)
-            print(f'Listening on port {port}')
-            return server_socket
+            print(address)
+            
+            try:
+                connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                connection.bind(address)
+                if listen:
+                    connection.listen(1)
+                    print(f'Listening on port {port}')
+                return connection
+            except OSError as e:
+                print(f"Error opening socket: {e}")
+                return None
         else:
-            print ("Not connectd to wifi")
-
+            print("Not connected to wifi")
+            return None
+    
+    def close_socket(self, connection):
+        if connection:
+            connection.close()
+            print("Socket closed")
+        
     @classmethod
     def wlan_scan(cls):
         # Scan WiFi network and return the list of available access points.
