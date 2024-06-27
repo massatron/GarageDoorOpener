@@ -1,108 +1,111 @@
-from machine import Pin, I2C
-import machine
+import socket
+import ujson
+from myWifi import MyWifi
 from door import Door
+from doorMonitor import DoorState
+from picozero import pico_led
 
 class DoorCommandListener:
-    # creates a listener on a port for a given MyWifi connection and Door
-    # if wifi is not connected a ValueError is thrown.
-    def __init__(self, door_to_control, myWifi, port = 5002, start_listening = True, print_to_console = False):
-        
+    def __init__(self, door_to_control, myWifi, listen_port=5002, start_listening=False, print_to_console=True):
         self.door = door_to_control
-        self.print_to_console = print_to_console
-        self.myWifi = myWifi
-        
+
         if myWifi.is_connected():
-            self.connection = myWifi.open_socket(myWifi.ip, port)
+            self.connection = myWifi.open_socket(myWifi.ip, listen_port, True)
             self.is_listening = False
         else:
             raise ValueError("Wifi is not connected.")
-    
+
         if start_listening:
-            self.start_server()
-    
-    # sends the current door state back to the client using given connection.
-    async def return_door_state(self, writer):
-        # evaluate current state
+            self.start(print_to_console)
+
+    def return_door_state(self, conn, print_to_console=True):
         door_state_changed = self.door.evaluate_door_state()
         current_door_state = self.door.get_current_state_string()
-        
-        if self.print_to_console:
+
+        if print_to_console:
             print(f'Current door state: {current_door_state}')
-            print(f'Listening for command.')
-        
-        writer.write(current_door_state.encode())
-        await writer.drain()  # Ensure response is sent
+
+        if conn is not None:
+            conn.send(current_door_state.encode())
     
-    # sends a given mesage back to client
-    async def return_message (self, writer, message):
-        if self.print_to_console:
-            print(message)
+    def return_minutes_in_state(self, conn, print_to_console=True):
+        #all but one should be 0
+        opn = self.door.minutes_open()
+        closed = self.door.minutes_closed()
+        opening = self.door.minutes_opening()
+        closing = self.door.minutes_closing()
         
-        writer.write(message.encode())
-        await writer.drain()  # Ensure response is sent
+        minutes_in_state = max(opn, closed, opening, closing)
+    
+        if print_to_console:
+            print(f'Minutes in state {self.door.get_current_state_string()}: {minutes_in_state}')
+
+        if conn is not None:
+            conn.send(str(minutes_in_state).encode())
+
+    def return_seconds_in_state(self, conn, print_to_console=True):
+        #all but one should be 0
+        opn = self.door.seconds_open()
+        opening = self.door.seconds_opening();
+        closed = self.door.seconds_closed()
+        closing = self.door.seconds_closing()
+        
+        seconds = max(opn, closed, opening, closing)
+    
+        if print_to_console:
+            print(f'Seconds in state {self.door.get_current_state_string()}: {seconds}')
+
+        if conn is not None:
+            conn.send(str(conn).encode())
+            
+    def return_connection_info(self, conn, print_to_console=True):
+        if print_to_console:
+            print(f'Returning connection information {conn}')
+
+        if conn is not None:
+            conn.send(str(conn).encode())
             
 
-    async def handle_client(self, reader, writer):
-        import ujson
+    def start(self, print_to_console=False):
+        self.return_door_state(None, print_to_console)
+        self.is_listening = True
 
         while self.is_listening:
-            
-            data = await reader.read(1024)  # Non-blocking read
-            
-            if not data:
-                writer.close()
-                await writer.wait_closed()
-                break  # If no data, close the connection
-            
+            conn, addr = self.connection.accept()
+
+            if print_to_console:
+                print(f'Connecting from: {addr}')
+
+            data = conn.recv(1024).decode()
+            command = ujson.loads(data)
+
+            if print_to_console:
+                print(f'Data received: {data}')
+                print(f'Command: {command}')
+
             try:
-                message = ujson.loads(data.decode().strip())
-                command = message['command']
-            except:
-                command = "invalid"
-                
-            try:
-                # check if we have a valid Door command
-                print(f"Received command: {command}")
-                
-                if command == 'open':
-                    self.door.open_the_door()
-                    await self.return_message(writer, "Opening door")
-                elif command == 'close':
-                    self.door.close_the_door()
-                    await self.return_message(writer, "Closing door")
-                elif command == 'stop':
-                    await self.return_message(writer, "Stopping listener.")
-                    self.is_listening = False
-                elif command == 'reboot':
-                    await self.return_message(writer, "Rebooting server.")
-                    machine.reset()
-                elif command == 'sleep':
-                    await self.return_message(writer, "Putting server to sleep")
-                    machine.deepsleep()
-                elif command == 'status':
-                    await self.return_door_state(writer)  
+                if 'gpio' in command:
+                    gpio_value = command['gpio']
+                    if gpio_value == 'open':
+                        self.door.open_the_door()
+                    elif gpio_value == 'close':
+                        self.door.close_the_door()
+                    elif gpio_value == 'stop':
+                        self.is_listening = False
+                    elif gpio_value == 'status':
+                        self.return_door_state(conn, print_to_console)
+                    elif gpio_value == "minutes_in_state":
+                        self.return_minutes_in_state(conn, print_to_console)
+                    elif gpio_value == "seconds_in_state":
+                        self.return_seconds_in_state(conn, print_to_console)
+                    elif gpio_value == "validate_connection":
+                        self.return_connection_info(conn, print_to_console)
+                    elif print_to_console:
+                        print('Invalid value for "gpio":', gpio_value)
                 else:
-                    await self.return_message(writer, "Invalid command received.")
-            except:
-                writer.close()
-                await writer.wait_closed()
-                break  # close the connection
+                    print('Error: Missing keys "gpio"')
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
 
-        writer.close()
-        await writer.wait_closed()
-
-    async def start_server(self):
-        import uasyncio as asyncio
-        self.is_listening = True
-        
-        _, local_port = self.connection.getsockname()
-        server = await asyncio.start_server(self.handle_client, self.myWifi.ip, local_port)
-        
-        async with server:
-            await server.serve_forever()
-            
-
-
-
-
-
+            print(f'Current door state is: {DoorState.state_string(self.door.current_state)}')
+            conn.close()
