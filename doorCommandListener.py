@@ -29,7 +29,7 @@ class DoorCommandListener:
             conn.send(current_door_state.encode())
     
     def return_minutes_in_state(self, conn, print_to_console=True):
-        #all but one should be 0
+        # all but one should be 0
         opn = self.door.minutes_open()
         closed = self.door.minutes_closed()
         opening = self.door.minutes_opening()
@@ -44,9 +44,9 @@ class DoorCommandListener:
             conn.send(str(minutes_in_state).encode())
 
     def return_seconds_in_state(self, conn, print_to_console=True):
-        #all but one should be 0
+        # all but one should be 0
         opn = self.door.seconds_open()
-        opening = self.door.seconds_opening();
+        opening = self.door.seconds_opening()
         closed = self.door.seconds_closed()
         closing = self.door.seconds_closing()
         
@@ -56,14 +56,14 @@ class DoorCommandListener:
             print(f'Seconds in state {self.door.get_current_state_string()}: {seconds}')
 
         if conn is not None:
-            conn.send(str(conn).encode())
+            conn.send(str(seconds).encode())
             
-    def return_connection_info(self, conn, print_to_console=True):
+    def return_connection_info(self, conn, address, print_to_console=True):
         if print_to_console:
-            print(f'Returning connection information {conn}')
+            print(f"Returning connection information {address[0]}:{address[1]}")
 
         if conn is not None:
-            conn.send(str(conn).encode())
+            conn.send(str(f"{address[0]}:{address[1]}").encode())
             
 
     def start(self, print_to_console=False):
@@ -75,15 +75,14 @@ class DoorCommandListener:
 
             if print_to_console:
                 print(f'Connecting from: {addr}')
-
-            data = conn.recv(1024).decode()
-            command = ujson.loads(data)
-
-            if print_to_console:
-                print(f'Data received: {data}')
-                print(f'Command: {command}')
-
             try:
+                data = conn.recv(1024).decode()
+                command = ujson.loads(data)
+
+                if print_to_console:
+                    print(f'Data received: {data}')
+                    print(f'Command: {command}')
+
                 if 'gpio' in command:
                     gpio_value = command['gpio']
                     if gpio_value == 'open':
@@ -99,13 +98,15 @@ class DoorCommandListener:
                     elif gpio_value == "seconds_in_state":
                         self.return_seconds_in_state(conn, print_to_console)
                     elif gpio_value == "validate_connection":
-                        self.return_connection_info(conn, print_to_console)
+                        self.return_connection_info(conn, addr, print_to_console)
                     elif print_to_console:
                         print('Invalid value for "gpio":', gpio_value)
                 else:
                     print('Error: Missing keys "gpio"')
             except Exception as e:
                 print(f"An unexpected error occurred: {e}")
-
+            finally:
+                if conn:
+                    conn.close()
+            
             print(f'Current door state is: {DoorState.state_string(self.door.current_state)}')
-            conn.close()
