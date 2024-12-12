@@ -1,89 +1,10 @@
 import RPi.GPIO as GPIO
-import time
+from doorRelay import DoorRelay
+from doorState import DoorState
+from doorStateTimer import DoorStateTimer
+from doorSensor import DoorSensor
 from appSettings import AppSettings
-
-class DoorRelay:
-    
-    #initialize relay switch on given pin
-    def __init__(self, gpioPin):
-        self.gpioPin = gpioPin
-        GPIO.setup(gpioPin, GPIO.OUT)
-        GPIO.output(gpioPin, GPIO.HIGH)        
-
-    #turn the relay switch on
-    def turn_on(self):
-        GPIO.output(self.gpioPin, GPIO.LOW)   # turns the first relay switch ON
-    
-    #turn the relay switch off
-    def turn_off(self):
-        GPIO.output(self.gpioPin, GPIO.HIGH)  # turns the first relay switch OFF
-    
-    #turns the relay switch on and off the given number of times
-    #with defined delay between operations
-    def toggle(self, delay_secs = .5 , no_times =1):
-        loop = 0
-        while loop < no_times:
-            self.turn_on()
-            time.sleep(delay_secs)
-            self.turn_off()
-            time.sleep(delay_secs)
-            loop = loop + 1
-            
-
-class DoorState:
-    Open = 1
-    Closed = 2
-    Unknown = 3
-    Opening = 4
-    Closing = 5
-    
-    def state_string(state):
-        if state == 1:
-            return "Open"
-        if state == 2:
-            return "Closed"
-        if state == 3:
-            return "Unknown"
-        if state == 4:
-            return "Opening"
-        if state == 5:
-            return "Closing"
-        
-        raise ValueError("DoorState value: ", state, " is invalid")
-    
-class DoorSensor:
-    def __init__(self, gpioPin):
-        self.gpioPin = gpioPin
-        GPIO.setup(gpioPin, GPIO.IN, GPIO.PUD_UP)
-    
-    def is_magnet_aligned(self):  
-        return (GPIO.input(self.gpioPin) == GPIO.HIGH)
-
-class DoorStateTimer:
-    
-    # time_unit can be "m" for minutes or "s" for seconds. Anything else will be treated as mintues.
-    def __init__(self, doorstate):
-        self.doorstate = doorstate
-        self.set_state_start()
-        
-    def reset(self):
-        self.start_time = None
-
-    def minutes_from_timestamp(self):
-        if self.start_time is None:
-            return 0
-        difference_minutes =self.seconds_from_timestamp() / 60
-        return int(difference_minutes)
-    
-    def seconds_from_timestamp(self):
-        if self.start_time is None:
-            return 0
-        now_stamp = time.mktime(time.localtime())
-        difference_secs = (now_stamp - self.start_time)
-        return int(difference_secs)
-    
-    def set_state_start(self):
-        self.start_time = time.mktime(time.localtime())
+import time
 
 class Door:
     
@@ -139,6 +60,7 @@ class Door:
     
     #probably either opening or closing, but could be stopped in between somewhere
     def set_moving_state(self):
+        #print(f"Setting Moving State. Last State:{DoorState.state_string(self.last_state)}")
         # Look at previous state to determine in which direction wer are moving.
         if self.last_state == DoorState.Opening:
             #still opening - we could be closing again, but we can't really tell.
@@ -157,7 +79,7 @@ class Door:
             self.set_opening_state() 
     
     def set_opening_state(self):
-
+        #print("Set opening state")
         if self.last_state != self.current_state:
             self.reset_state_timers()
             self.opening_state_timer.set_state_start()
@@ -214,14 +136,13 @@ class Door:
             return self.open_state_timer.minutes_from_timestamp()
         else:
             return 0
-        return self.open_door.minutes_from_timestamp()
     
     def seconds_closed(self):
         if self.is_closed():
             return self.closed_state_timer.seconds_from_timestamp()
         else:
             return 0
-    
+        
     def minutes_closed(self):
         if self.is_closed():
             return self.closed_state_timer.minutes_from_timestamp()
@@ -253,6 +174,7 @@ class Door:
             return 0
         
     def state_changed(self):
+        #print(f"State changed? {self.last_state != self.current_state}")
         return self.current_state != self.last_state
     
     # Evaluates the current state of the door, based on door sensor positions and returns a boolean value, indicating whether or not
@@ -265,28 +187,36 @@ class Door:
             
         elif self.sensors == 1 and self.closed_sensor is not None :
             #We only have one sensor, so we are either closed or assumed open.
-            if self.closed_sensor.is_magnet_aligned():
+            closed_aligned = self.closed_sensor.is_magnet_aligned()
+            if closed_aligned:
                 self.set_closed_state()
             else:
                 self.set_open_state()
                     
         elif self.sensors == 1 and self.open_sensor is not None:
             #We only have one sensor, so we are either open or assumed closed.
-            if self.open_sensor.is_magnet_aligned():
+            open_aligned = self.open_sensor.is_magnet_aligned()
+            if open_aligned:
                 self.set_open_state()
             else:
                 self.set_closed_state()
             
         elif self.sensors == 2 and self.closed_sensor is not None and self.open_sensor is not None:
+            closed_aligned = self.closed_sensor.is_magnet_aligned()
+            open_aligned = self.open_sensor.is_magnet_aligned()
+
+            #print(f"Evaluating door state: Closed={closed_aligned}, Open={open_aligned}")
+    
             # We have two sensors, we should be able to determine if we are open, closed, in an opening or closing state.
-            if self.closed_sensor.is_magnet_aligned() and self.open_sensor.is_magnet_aligned():
+            if closed_aligned and open_aligned:
                 message = "This should be physically impossible. The door is both open and closed at the same time...Call Einstein, we have discovered new physics."
+                #print(message)
                 #raise ValueError(message)
             
-            elif self.closed_sensor.is_magnet_aligned():
+            elif closed_aligned:
                 self.set_closed_state()
                 
-            elif self.open_sensor.is_magnet_aligned():
+            elif open_aligned:
                 self.set_open_state()
                 
             else:
@@ -298,6 +228,7 @@ class Door:
         
         if(self.state_changed()):
             self.state_change_message = "Door state changed from {} to {}".format(DoorState.state_string(self.last_state), DoorState.state_string(self.current_state))
+            #print(self.state_change_message)
             return True
         else:
             return False            

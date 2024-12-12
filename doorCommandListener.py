@@ -49,11 +49,16 @@ class DoorCommandListener:
         opening = self.door.seconds_opening()
         closed = self.door.seconds_closed()
         closing = self.door.seconds_closing()
-        
-        seconds = max(opn, closed, opening, closing)
     
+        seconds = max(opn, closed, opening, closing)
+
         if print_to_console:
             print(f'Seconds in state {self.door.get_current_state_string()}: {seconds}')
+            print(f'Open: {opn}')
+            print(f'Opening: {opening}')
+            print(f'Closed: {closed}')
+            print(f'Closing: {closing}')
+            
 
         if conn is not None:
             conn.send(str(seconds).encode())
@@ -109,4 +114,5 @@ class DoorCommandListener:
                 if conn:
                     conn.close()
             
-            print(f'Current door state is: {DoorState.state_string(self.door.current_state)}')
+            if print_to_console:
+                print(f'Current door state is: {DoorState.state_string(self.door.current_state)}')
