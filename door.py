@@ -61,7 +61,7 @@ class Door:
     #probably either opening or closing, but could be stopped in between somewhere
     def set_moving_state(self):
         #print(f"Setting Moving State. Last State:{DoorState.state_string(self.last_state)}")
-        # Look at previous state to determine in which direction wer are moving.
+        # Look at previous state to determine in which direction we are moving.
         if self.last_state == DoorState.Opening:
             #still opening - we could be closing again, but we can't really tell.
             self.set_opening_state()
@@ -180,58 +180,61 @@ class Door:
     # Evaluates the current state of the door, based on door sensor positions and returns a boolean value, indicating whether or not
     # the state of the door changed since last evaluation. If the state has changed, a message describing the state change is available
     # from the self.state_change_message member.
-    def evaluate_door_state(self):
-        if self.sensors == 0 or self.sensors is None:
-            # no sensors present, which means we can't determine state
-            set_unknown_state()
-            
-        elif self.sensors == 1 and self.closed_sensor is not None :
-            #We only have one sensor, so we are either closed or assumed open.
-            closed_aligned = self.closed_sensor.is_magnet_aligned()
-            if closed_aligned:
-                self.set_closed_state()
-            else:
-                self.set_open_state()
-                    
-        elif self.sensors == 1 and self.open_sensor is not None:
-            #We only have one sensor, so we are either open or assumed closed.
-            open_aligned = self.open_sensor.is_magnet_aligned()
-            if open_aligned:
-                self.set_open_state()
-            else:
-                self.set_closed_state()
-            
-        elif self.sensors == 2 and self.closed_sensor is not None and self.open_sensor is not None:
-            closed_aligned = self.closed_sensor.is_magnet_aligned()
-            open_aligned = self.open_sensor.is_magnet_aligned()
-
-            #print(f"Evaluating door state: Closed={closed_aligned}, Open={open_aligned}")
+def evaluate_door_state(self):
+    # Read sensor states
+    closed_aligned = self.closed_sensor.is_magnet_aligned()
+    open_aligned = self.open_sensor.is_magnet_aligned()
     
-            # We have two sensors, we should be able to determine if we are open, closed, in an opening or closing state.
-            if closed_aligned and open_aligned:
-                message = "This should be physically impossible. The door is both open and closed at the same time...Call Einstein, we have discovered new physics."
-                #print(message)
-                #raise ValueError(message)
-            
-            elif closed_aligned:
-                self.set_closed_state()
-                
-            elif open_aligned:
-                self.set_open_state()
-                
-            else:
-                # The door is somewhere between fully opened and fully closed.
-                self.set_moving_state()
-        else:
-            message = "Something is wrong in the sensor settings for this Door instance."
-            raise ValueError(message)
+    #print(f"Evaluating door state: Closed={closed_aligned}, Open={open_aligned}")
+    
+    if self.sensors == 0 or self.sensors is None:
+        #print("No sensors detected. Setting unknown state.")
+        self.set_unknown_state()
         
-        if(self.state_changed()):
-            self.state_change_message = "Door state changed from {} to {}".format(DoorState.state_string(self.last_state), DoorState.state_string(self.current_state))
-            #print(self.state_change_message)
-            return True
+    elif self.sensors == 1 and self.closed_sensor is not None:
+        if closed_aligned:
+            #print("Closed sensor aligned. Setting closed state.")
+            self.set_closed_state()
         else:
-            return False            
+            #print("Closed sensor not aligned. Assuming open state.")
+            self.set_open_state()
+            
+    elif self.sensors == 1 and self.open_sensor is not None:
+        if open_aligned:
+            #print("Open sensor aligned. Setting open state.")
+            self.set_open_state()
+        else:
+            #print("Open sensor not aligned. Assuming closed state.")
+            self.set_closed_state()
+            
+    elif self.sensors == 2:
+        # Two sensors are present
+        if closed_aligned and open_aligned:
+            #print("Error: Both sensors aligned. Invalid state.")
+            self.set_unknown_state()  # Physically invalid state
+        elif closed_aligned:
+            #print("Closed sensor aligned. Setting closed state.")
+            self.set_closed_state()
+        elif open_aligned:
+            #print("Open sensor aligned. Setting open state.")
+            self.set_open_state()
+        else:
+            #print("Neither sensor aligned. Door is moving.")
+            self.set_moving_state()
+    else:
+        #print("Invalid sensor configuration.")
+        raise ValueError("Something is wrong in the sensor settings for this Door instance.")
+    
+    if self.state_changed():
+        self.state_change_message = "Door state changed from {} to {}".format(
+            DoorState.state_string(self.last_state),
+            DoorState.state_string(self.current_state),
+        )
+        #print(self.state_change_message)
+        return True
+    else:
+        #print("Door state did not change.")
+        return False
     
     #Sends a signal to the relay switch to open the garage door, if the current state is closed, and returns True and DoorState.Opening.
     #If the garage door is not in a closed state, False and the current DoorState is returned. (e.g. DoorState.Closed)
