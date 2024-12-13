@@ -110,6 +110,7 @@ class DoorCommandListener:
                     print('Error: Missing keys "gpio"')
             except Exception as e:
                 print(f"An unexpected error occurred: {e}")
+                print(f"Data received: {data}")
             finally:
                 if conn:
                     conn.close()
